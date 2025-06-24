@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1067014827835",
+    "project_id": "uts-palp-2025-22100043",
+    "storage_bucket": "uts-palp-2025-22100043.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1067014827835:android:7abf3bd5a8eeebf1b9d11e",
+        "android_client_info": {
+          "package_name": "com.example.palp_uts_remedial"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBvlZoSTSHtxEc2ta_b58kOdpBE5oqI2p0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

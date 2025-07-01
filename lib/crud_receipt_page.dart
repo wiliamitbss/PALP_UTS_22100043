@@ -7,6 +7,7 @@ import 'add_warehouse_page.dart';
 import 'add_supplier_page.dart';
 import 'receive_page.dart';
 import 'delivery_page.dart';
+import 'mutasi.dart';
 
 class CrudReceiptPage extends StatefulWidget {
   const CrudReceiptPage({super.key});
@@ -127,6 +128,18 @@ class _CrudReceiptPageState extends State<CrudReceiptPage> {
         title: const Text('Receipts'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.compare_arrows),
+            tooltip: 'Mutasi Barang',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const MutasiBarangPage(),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.local_shipping),
             tooltip: 'Deliveries',
             onPressed: () {
@@ -182,51 +195,59 @@ class _CrudReceiptPageState extends State<CrudReceiptPage> {
                         ],
                       ),
                       onTap: () => _openEditForm(doc),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder:
-                                (_) => AlertDialog(
-                                  title: const Text("Confirm Delete"),
-                                  content: const Text("Delete this receipt?"),
-                                  actions: [
-                                    TextButton(
-                                      onPressed:
-                                          () => Navigator.pop(context, false),
-                                      child: const Text("Cancel"),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () async {
+                              // kode hapus kamu tetap di sini
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder:
+                                    (_) => AlertDialog(
+                                      title: const Text("Confirm Delete"),
+                                      content: const Text(
+                                        "Delete this receipt?",
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.pop(context, false),
+                                          child: const Text("Cancel"),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.pop(context, true),
+                                          child: const Text("Delete"),
+                                        ),
+                                      ],
                                     ),
-                                    ElevatedButton(
-                                      onPressed:
-                                          () => Navigator.pop(context, true),
-                                      child: const Text("Delete"),
-                                    ),
-                                  ],
-                                ),
-                          );
-
-                          if (confirm == true) {
-                            // Delete receipt + details subcollection
-                            final details =
-                                await doc.reference.collection('details').get();
-                            for (var detailDoc in details.docs) {
-                              await detailDoc.reference.delete();
-                            }
-                            await doc.reference.delete();
-
-                            // Reload list after delete
-                            await _loadReceipts();
-
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Receipt deleted'),
-                                ),
                               );
-                            }
-                          }
-                        },
+
+                              if (confirm == true) {
+                                final details =
+                                    await doc.reference
+                                        .collection('details')
+                                        .get();
+                                for (var detailDoc in details.docs) {
+                                  await detailDoc.reference.delete();
+                                }
+                                await doc.reference.delete();
+                                await _loadReceipts();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Receipt deleted'),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -372,7 +393,7 @@ class _ReceiptFormPageState extends State<ReceiptFormPage> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _details.isEmpty) return;
-
+  
     final data = {
       'no_form': _formNumberController.text.trim(),
       'grandtotal': grandTotal,
@@ -383,56 +404,58 @@ class _ReceiptFormPageState extends State<ReceiptFormPage> {
       'warehouse_ref': _warehouse,
       'synced': true,
     };
-
+  
     final batch = FirebaseFirestore.instance.batch();
-
+  
     if (isEditing) {
       final ref = widget.receiptDoc!.reference;
       await ref.update(data);
-
+  
       final existingDetails = await ref.collection('details').get();
       for (var doc in existingDetails.docs) {
         await doc.reference.delete();
       }
-
+  
       for (var item in _details) {
         await ref.collection('details').add(item.toMap());
       }
-
-      // ⚠️ Optional: Handle rollback logic if you want to reverse previous stock changes
+  
+      // OPTIONAL: If you want to rollback stock from old receipt here, you'd do it here.
+      // But based on your request, we're avoiding any negative stock mutation here.
     } else {
       data['created_at'] = DateTime.now();
       final doc = await FirebaseFirestore.instance
           .collection('purchaseGoodsReceipts')
           .add(data);
-
+  
       for (var item in _details) {
         await doc.collection('details').add(item.toMap());
-
+  
         final productRef = item.productRef!;
         final qty = item.qty;
-
-        // 🔍 1. Update products collection (add qty)
+  
+        // ✅ 1. Update products collection (add qty only)
         batch.update(productRef, {
           'qty': FieldValue.increment(qty),
         });
-
-        // 🔍 2. Update or create in stocks collection
+  
+        // ✅ 2. Update or create stock for the selected warehouse only (no transfers)
         final stockQuery = await FirebaseFirestore.instance
             .collection('stocks')
             .where('product_ref', isEqualTo: productRef)
             .where('warehouse_ref', isEqualTo: _warehouse)
             .limit(1)
             .get();
-
+  
         if (stockQuery.docs.isNotEmpty) {
-          // Update existing stock doc
+          // Update existing stock document
           final stockDoc = stockQuery.docs.first.reference;
           batch.update(stockDoc, {
             'qty': FieldValue.increment(qty),
           });
+          print("✅ Added $qty stock to existing warehouse $_warehouse for product $productRef");
         } else {
-          // Create new stock doc
+          // Create new stock document
           final newStockDoc =
               FirebaseFirestore.instance.collection('stocks').doc();
           batch.set(newStockDoc, {
@@ -440,12 +463,13 @@ class _ReceiptFormPageState extends State<ReceiptFormPage> {
             'warehouse_ref': _warehouse,
             'qty': qty,
           });
+          print("✅ Created new stock doc with $qty for warehouse $_warehouse and product $productRef");
         }
       }
     }
-
+  
     await batch.commit();
-
+  
     if (mounted) Navigator.pop(context, true);
   }
 
